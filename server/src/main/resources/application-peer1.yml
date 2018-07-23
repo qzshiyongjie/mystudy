@@ -1,0 +1,8 @@
+server:
+  port: 1111
+eureka:
+  instance:
+    hostname: peer1
+  client:
+    serviceUrl:
+      defauleZone: http://127.0.0.1:1112/eureka/
