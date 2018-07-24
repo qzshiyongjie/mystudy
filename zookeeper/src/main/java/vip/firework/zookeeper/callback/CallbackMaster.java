@@ -8,11 +8,13 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Random;
 @Component
 public class CallbackMaster implements Watcher {
     private static Logger logger = LoggerFactory.getLogger(CallbackMaster.class);
     static final String MASTER = "/master";
+    static final String WORKERS = "/workers";
     private static ZooKeeper zk=null;
     @Value("${zookeeper.hostPort}")
     private String hostPort;
@@ -121,6 +123,40 @@ public class CallbackMaster implements Watcher {
                 }
             }
         },null);
+    }
+    void getWorkers(){
+        zk.getChildren(WORKERS, new Watcher() {
+            @Override
+            public void process(WatchedEvent watchedEvent) {
+                if(watchedEvent.getType() == Event.EventType.NodeChildrenChanged){
+                    if(WORKERS.equals(watchedEvent.getPath())){
+                        getWorkers();
+                    }
+                }
+            }
+        }, new AsyncCallback.ChildrenCallback() {
+            @Override
+            public void processResult(int i, String s, Object o, List<String> list) {
+                switch (KeeperException.Code.get(i)){
+                    case CONNECTIONLOSS:{
+                        getworkerList();
+                        break;
+                    }
+                    case OK:{
+                        logger.error("successfull got a list of worker size:{}",list.size());
+                        reassignAndSet(list);
+                    }
+                }
+            }
+        },null);
+    }
+    //TODO
+    void getworkerList(){
+
+    }
+    //TODO
+    void reassignAndSet(List<String> child){
+
     }
 
     public boolean isLeader(){
