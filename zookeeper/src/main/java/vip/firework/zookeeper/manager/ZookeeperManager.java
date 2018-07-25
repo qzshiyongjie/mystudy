@@ -22,7 +22,7 @@ public class ZookeeperManager{
     private static ZooKeeper zk=null;
     @PostConstruct
     public void init() {
-        hostPort = staticHostPort;
+        staticHostPort=hostPort;
     }
     private static ZooKeeper startZk(){
         if(zk == null){

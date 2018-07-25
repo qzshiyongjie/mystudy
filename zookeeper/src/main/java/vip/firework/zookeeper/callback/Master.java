@@ -21,7 +21,7 @@ public class Master {
     enum MasterStatus{
         RUNNING, ELECTED,NOTELECTED
     }
-    MasterStatus state;
+    MasterStatus state=MasterStatus.NOTELECTED;
     String serverId = Integer.toHexString(random.nextInt());
     List<String> workersCache=new ArrayList<>();//从节点列表的本地缓存
     public List<String> getChildrenPath(String path){
@@ -347,7 +347,7 @@ public class Master {
                 CreateMode.PERSISTENT, new AsyncCallback.StringCallback() {
                     @Override
                     public void processResult(int i, String s, Object o, String s1) {
-                        logger.info("masterCheckData,code {} ,path{} ,data{}",i,s,o);
+                        logger.info("master createParent,code {} ,path{} ,data{}",i,s,o);
                         switch (KeeperException.Code.get(i)){
                             case CONNECTIONLOSS:{
                                 createParent(s,(byte[])o);
