@@ -1,16 +1,17 @@
 package vip.firework.zookeeper;
 
-import org.apache.zookeeper.Watcher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
-import vip.firework.zookeeper.actor.Master;
-import vip.firework.zookeeper.callback.CallbackMaster;
-import vip.firework.zookeeper.callback.CallbackWorker;
+import vip.firework.zookeeper.callback.Master;
+import vip.firework.zookeeper.callback.Worker;
+import vip.firework.zookeeper.manager.ZookeeperManager;
 
 import java.io.IOException;
 
@@ -19,36 +20,35 @@ import java.io.IOException;
 public class ZookeeperApplication {
     private static Logger logger = LoggerFactory.getLogger(ZookeeperApplication.class);
     @Autowired
-    private CallbackMaster master;
+    private Master master;
     @Autowired
-    private CallbackWorker worker;
+    private Worker worker;
+    @Autowired
+    private ZookeeperManager zookeeperManager;
     @RequestMapping("/startZkmaster")
     public String startZkMaster(){
-        try {
-            master.startZk();
-            master.runForMaster();
-            master.bootstrap();
-            if(master.isLeader()){
-                logger.info("I am leader");
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
+        master.runForMaster();
+        master.bootstrap();
+        if(master.isLeader()){
+            logger.info("I am leader");
         }
         return "success";
     }
-    @RequestMapping("/startClient")
-    public String startClient(){
-        try {
-            worker.startZk();
-            worker.register();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+    @RequestMapping("/startClient/{id}")
+    public String startClient(@PathVariable("id") Integer id){
+        worker.changeWorker(id);
+        worker.register();
         return "success";
+    }
+
+    @RequestMapping("/showChildren/{path}")
+    @ResponseBody
+    public Object showChildren(@PathVariable("path") String path){
+        return master.getChildrenPath(path);
     }
     @RequestMapping("/stopZkmaster")
     public String stopZkmaster(){
-        if(master.stopZk())
+        if(ZookeeperManager.stopZk())
             return "success";
         else return "fail";
     }
