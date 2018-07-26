@@ -17,7 +17,7 @@ import java.util.concurrent.Executors;
 public class Worker {
     private static Logger logger = LoggerFactory.getLogger(Worker.class);
     static final String ASSIGN_WORKER="/assign/worker-";
-    static final String STATUS="/status";
+    static final String  STATUS="/status";
     @Value("${zookeeper.hostPort}")
     private String hostPort;
     private Random random = new Random();
@@ -31,7 +31,7 @@ public class Worker {
     }
     public void  register(){
         ZookeeperManager.getZk().create("/workers"+name,
-                new byte[0], ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL,
+                "CURRNET".getBytes(), ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL,
                 new AsyncCallback.StringCallback() {
                     @Override
                     public void processResult(int i, String s, Object o, String s1) {
@@ -58,7 +58,33 @@ public class Worker {
                 },null);
     }
     void doWorder(){
+        //创建 ASSIGN_WORKER 节点
+        createAssignWorker();
         getAssignTasks();
+    }
+    void createAssignWorker(){
+        ZookeeperManager.getZk().create(ASSIGN_WORKER + serverId, new byte[0], ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT, new AsyncCallback.StringCallback() {
+            @Override
+            public void processResult(int i, String s, Object o, String s1) {
+                switch (KeeperException.Code.get(i)){
+                    case CONNECTIONLOSS:{
+                        createAssignWorker();
+                        break;
+                    }
+                    case OK:{
+                        logger.info("create assign ok path {}",s);
+                        break;
+                    }
+                    case NODEEXISTS:{
+                        logger.info("has create by other path {}",s);
+                        break;
+                    }
+                    default:{
+                        logger.error("create assign pash{} code {}",s,i);
+                    }
+                }
+            }
+        },null);
     }
     void getAssignTasks(){
         ZookeeperManager.getZk().getChildren(ASSIGN_WORKER+ serverId, new Watcher() {
@@ -98,13 +124,23 @@ public class Worker {
                     String path = ASSIGN_WORKER+serverId+"/"+task;
                     try {
                         byte[] datas= ZookeeperManager.getZk().getData(path,false,stat);
-                        if(datas!=null && datas.length>0){
-                            logger.info("task: {} has bend done status: {}",task,new String(datas));
-                        }else {
-                            logger.info("task {} doing",task);
-                            ZookeeperManager.getZk().setData(path,"DONE".getBytes(),-1);
-                            logger.info("task{} do ok status {}",new String(ZookeeperManager.getZk().getData(path,false,stat)));
-                            ZookeeperManager.getZk().create(STATUS+"/"+task,"DONE".getBytes(), ZooDefs.Ids.OPEN_ACL_UNSAFE,CreateMode.PERSISTENT);
+                        if(datas!=null && datas.length>0) {
+                            String taskName = new String(datas);
+                            logger.info("task: {} taskname: {}", task, new String(datas));
+                            //已经执行成功的删除分配的任务
+                            if(taskName.equals("DONE")){
+                                logger.info("task {} has bend done");
+                                deletAssignTask(task,path);
+                            }else {
+                                //正在执行的标记执行记录
+                                logger.info("task {} doing", task);
+                                ZookeeperManager.getZk().setData(path, "DONE".getBytes(), -1);
+                                logger.info("task {} ,name {} down",task,taskName);
+                                //status底下创建task执行状态
+                                ZookeeperManager.getZk().create(STATUS + "/" + task, taskName.getBytes(), ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
+                                //删除已经执行过的任务
+                                deletAssignTask(task,path);
+                            }
                         }
                     } catch (KeeperException e) {
                         e.printStackTrace();
@@ -114,6 +150,27 @@ public class Worker {
                 }
             }
         });
+    }
+    void deletAssignTask(String task,String path){
+        ZookeeperManager.getZk().getData(STATUS + "/" + task, false, new AsyncCallback.DataCallback() {
+            @Override
+            public void processResult(int i, String s, Object o, byte[] bytes, Stat stat) {
+                if(KeeperException.Code.get(i).equals(KeeperException.Code.OK)){
+                    deleteTask(path);
+                }
+            }
+        },null);
+    }
+
+    void deleteTask(String path){
+        logger.info("delete task path {}",path);
+        try {
+            ZookeeperManager.getZk().delete(path,-1);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        } catch (KeeperException e) {
+            e.printStackTrace();
+        }
     }
 
     public void setStatus(String status){

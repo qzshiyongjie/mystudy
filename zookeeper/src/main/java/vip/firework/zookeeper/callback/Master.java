@@ -14,7 +14,7 @@ public class Master {
     private static Logger logger = LoggerFactory.getLogger(Master.class);
     static final String MASTER = "/master";
     static final String WORKERS = "/workers";
-    static final String TASKS="/task";
+    static final String TASKS="/tasks";
     static final String ASSIGN="/assign";
     static final String STATUS="/status";
     private Random random = new Random();
@@ -135,7 +135,10 @@ public class Master {
         //监测worker状态
         getWorkers();
         //监测task状态
-        getTasks();
+        if(workersCache.size()>0){
+            getTasks();
+        }
+
     };
 
 
@@ -174,10 +177,10 @@ public class Master {
     void reassignAndSet(List<String> children){
         List<String> toProcess=new ArrayList<>();
         Collections.sort(children);
-        if(workersCache.size()==0){
+        if(children.size()==0){
             workersCache.clear();
-            workersCache.addAll(children);
         }else {
+            workersCache.addAll(children);
             toProcess=removeAndSet(children);
         }
         if(toProcess.size()>0){
@@ -186,6 +189,10 @@ public class Master {
                 reAssignTask(worker);
             }
         }
+        //尝试重新历史任务
+        if(workersCache.size()>0){
+            getTasks();
+        }
     }
 
     /**
@@ -193,7 +200,7 @@ public class Master {
      */
     void reAssignTask(String workerPath){
         try {
-            List<String> tasks = ZookeeperManager.getZk().getChildren(ASSIGN+workerPath,false);
+            List<String> tasks = ZookeeperManager.getZk().getChildren(ASSIGN+"/"+workerPath,false);
             if(tasks != null && tasks.size()>0){
                 assignTask(tasks);
             }
@@ -244,9 +251,11 @@ public class Master {
         }
     }
     void getTaskData(String task){
-        ZookeeperManager.getZk().getData(TASKS + task, false, new AsyncCallback.DataCallback() {
+        logger.info("start get task data  path {}",task);
+        ZookeeperManager.getZk().getData(TASKS +"/"+ task, false, new AsyncCallback.DataCallback() {
             @Override
             public void processResult(int i, String s, Object o, byte[] bytes, Stat stat) {
+                logger.info("taskcallback path {} ,code {}",s,i);
                 switch (KeeperException.Code.get(i)){
                     case CONNECTIONLOSS:{
                         getTaskData((String) o);
@@ -256,12 +265,12 @@ public class Master {
                         //本地缓存取workers
                         int randomWorker = random.nextInt(workersCache.size());
                         String workerNodePath = workersCache.get(randomWorker);
-                        String assignPath = ASSIGN+workerNodePath+"/"+o;
+                        String assignPath = ASSIGN+"/"+workerNodePath+"/"+o;
                         createAssignment(assignPath,bytes);
+                        break;
                     }
                     default:{
-                        logger.error("error when trying to get task data",
-                                KeeperException.create(KeeperException.Code.get(i),new String(bytes)));
+                        logger.error("error when trying to get task data", KeeperException.create(KeeperException.Code.get(i),new String(bytes)));
                     }
                 }
             }
@@ -274,6 +283,7 @@ public class Master {
      * @param data
      */
     void createAssignment(String path,byte[] data){
+        logger.info("createAssignment path{} data {}",path,new String(data));
         ZookeeperManager.getZk().create(path, data, ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT, new AsyncCallback.StringCallback() {
             @Override
             public void processResult(int i, String s, Object o, String s1) {
@@ -285,13 +295,14 @@ public class Master {
                     case OK:{
                         logger.info(" task assign success {}",s);
                         //删除已经分配 task 节点
-                        deleteTask(s.substring(s.lastIndexOf("/")+1));
+                        deleteTask(TASKS+s.substring(s.lastIndexOf("/")));
                     }
                 }
             }
         },data);
     }
     void deleteTask(String path){
+        logger.info("delete task path {}",path);
         try {
             ZookeeperManager.getZk().delete(path,-1);
         } catch (InterruptedException e) {
@@ -320,7 +331,7 @@ public class Master {
         for(String child:children){
             Stat stat = new Stat();
             try {
-                byte[] datas= ZookeeperManager.getZk().getData(child,false,stat);
+                byte[] datas= ZookeeperManager.getZk().getData(WORKERS+"/"+child,false,stat);
                 if(datas == null || datas.length==0){
                     result.add(child);
                 }
@@ -337,6 +348,10 @@ public class Master {
         return state.equals(MasterStatus.ELECTED);
     }
     public void bootstrap(){
+//        deleteTask(WORKERS);
+//        deleteTask(ASSIGN);
+//        deleteTask(TASKS);
+//        deleteTask(STATUS);
         createParent(WORKERS,new byte[0]);
         createParent(ASSIGN,new byte[0]);
         createParent(TASKS,new byte[0]);

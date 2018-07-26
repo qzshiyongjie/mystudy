@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
+import vip.firework.zookeeper.callback.Client;
 import vip.firework.zookeeper.callback.Master;
 import vip.firework.zookeeper.callback.Worker;
 import vip.firework.zookeeper.manager.ZookeeperManager;
@@ -23,6 +24,8 @@ public class ZookeeperApplication {
     private Master master;
     @Autowired
     private Worker worker;
+    @Autowired
+    private Client client;
     @Autowired
     private ZookeeperManager zookeeperManager;
     @RequestMapping("/startZkmaster")
@@ -44,7 +47,7 @@ public class ZookeeperApplication {
     @RequestMapping("/showChildren/{path}")
     @ResponseBody
     public Object showChildren(@PathVariable("path") String path){
-        return master.getChildrenPath(path);
+        return master.getChildrenPath("/"+path);
     }
     @RequestMapping("/stopZkmaster")
     public String stopZkmaster(){
@@ -52,6 +55,12 @@ public class ZookeeperApplication {
             return "success";
         else return "fail";
     }
+    @RequestMapping("/createTask/{task}")
+    public String createTask(@PathVariable("task") String task){
+        client.submitTask(task);
+        return "success";
+    }
+
     @RequestMapping("/checkMaster")
     public String checkMaster(){
         master.checkMaster();

@@ -18,20 +18,22 @@ public class Client {
     static final String TASKS="/tasks/task-";
     static final String STATUS = "/status";
     static final String STATUS_TASK = "/status/task-";
-    void submitTask(String task){
+    public void submitTask(String task){
+        logger.info("submitTask task{}",task);
         ZookeeperManager.getZk().create(TASKS, task.getBytes(),
                 ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT_SEQUENTIAL,
                 new AsyncCallback.StringCallback() {
                     @Override
                     public void processResult(int i, String s, Object o, String s1) {
+                        logger.info("submitTask callback i {} s{} o{} s1{} ",i,s,o,s1);
                         switch (KeeperException.Code.get(i)){
                             case CONNECTIONLOSS:{
                                 submitTask(o.toString());
                                 break;
                             }
                             case OK:{
-                                logger.info("my create task name:{}",s);
-                                String path = STATUS+"/"+s.substring(s.lastIndexOf("/")+1);
+                                logger.info("my create task name:{}",s1);
+                                String path = STATUS+"/"+s1.substring(s1.lastIndexOf("/")+1);
                                 watchStatus(path,task);
                                 break;
                             }
@@ -46,10 +48,11 @@ public class Client {
 
     }
     void watchStatus(String path,String task){
+        logger.info("watch status path{} task{}",path,task);
         ZookeeperManager.getZk().exists(path, new Watcher() {
             @Override
             public void process(WatchedEvent watchedEvent) {
-                if(watchedEvent.getType()==Event.EventType.NodeChildrenChanged){
+                if(watchedEvent.getType()==Event.EventType.NodeCreated){
                     if(watchedEvent.getPath().contains(STATUS_TASK)){
                         getTaskStatus(path,task);
                     }
@@ -58,6 +61,7 @@ public class Client {
         }, new AsyncCallback.StatCallback() {
             @Override
             public void processResult(int i, String s, Object o, Stat stat) {
+                logger.info("watch status change callback path{}",s);
                 switch (KeeperException.Code.get(i)){
                     case CONNECTIONLOSS:{
                         watchStatus(s,o.toString());
